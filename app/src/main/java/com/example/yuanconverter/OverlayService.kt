@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.IBinder
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -14,6 +15,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import kotlin.math.abs
 
 class OverlayService : Service() {
@@ -43,6 +45,15 @@ class OverlayService : Service() {
     private fun showBubble() {
         bubbleView = LayoutInflater.from(this).inflate(R.layout.overlay_bubble, null)
 
+        var longPressTriggered = false
+        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: MotionEvent) {
+                longPressTriggered = true
+                Toast.makeText(this@OverlayService, "Floating converter closed", Toast.LENGTH_SHORT).show()
+                stopSelf()
+            }
+        })
+
         bubbleParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -64,6 +75,7 @@ class OverlayService : Service() {
         var moved = false
 
         bubbleView?.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = bubbleParams!!.x
@@ -71,22 +83,27 @@ class OverlayService : Service() {
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
                     moved = false
+                    longPressTriggered = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - initialTouchX).toInt()
                     val dy = (event.rawY - initialTouchY).toInt()
                     if (abs(dx) > 10 || abs(dy) > 10) moved = true
-                    bubbleParams!!.x = initialX - dx
-                    bubbleParams!!.y = initialY + dy
-                    windowManager.updateViewLayout(bubbleView, bubbleParams)
+                    if (!longPressTriggered) {
+                        bubbleParams!!.x = initialX - dx
+                        bubbleParams!!.y = initialY + dy
+                        windowManager.updateViewLayout(bubbleView, bubbleParams)
+                    }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!moved) {
-                        toggleExpanded()
-                    } else {
-                        snapToEdge()
+                    if (!longPressTriggered) {
+                        if (!moved) {
+                            toggleExpanded()
+                        } else {
+                            snapToEdge()
+                        }
                     }
                     true
                 }
